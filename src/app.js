@@ -2,6 +2,8 @@ import crypto from 'node:crypto';
 import express from 'express';
 import { createStore } from './store.js';
 
+const REDEMPTION_TTL_MS = 10 * 60 * 1000;
+
 function isNonEmptyString(value) {
   return typeof value === 'string' && value.trim().length > 0;
 }
@@ -12,6 +14,10 @@ function getUtcDateKey(date) {
 
 function generateRedemptionCode() {
   return crypto.randomBytes(4).toString('hex').toUpperCase();
+}
+
+function isExpired(booking, currentDate) {
+  return booking.status !== 'redeemed' && currentDate.getTime() > Date.parse(booking.expiresAt);
 }
 
 /**
@@ -48,7 +54,9 @@ export function createApp({ store = createStore(), now = () => new Date() } = {}
     const todayUtc = getUtcDateKey(currentDate);
     const todaysVenueBookings = store.bookings.filter(
       (booking) =>
-        booking.venueId === venue.id && booking.createdAt.slice(0, 10) === todayUtc,
+        booking.venueId === venue.id &&
+        booking.createdAt.slice(0, 10) === todayUtc &&
+        !isExpired(booking, currentDate),
     ).length;
 
     if (todaysVenueBookings >= venue.dailyCapacity) {
@@ -70,6 +78,7 @@ export function createApp({ store = createStore(), now = () => new Date() } = {}
       redemptionCode: generateRedemptionCode(),
       status: 'active',
       createdAt: currentDate.toISOString(),
+      expiresAt: new Date(currentDate.getTime() + REDEMPTION_TTL_MS).toISOString(),
       redeemedAt: null,
     };
 
@@ -95,8 +104,13 @@ export function createApp({ store = createStore(), now = () => new Date() } = {}
       return res.status(410).json({ error: 'Booking has already been redeemed' });
     }
 
+    const currentDate = now();
+    if (isExpired(booking, currentDate)) {
+      return res.status(410).json({ error: 'Redemption code has expired' });
+    }
+
     booking.status = 'redeemed';
-    booking.redeemedAt = now().toISOString();
+    booking.redeemedAt = currentDate.toISOString();
 
     return res.status(200).json(booking);
   });
@@ -107,7 +121,11 @@ export function createApp({ store = createStore(), now = () => new Date() } = {}
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const bookings = store.bookings.filter((booking) => booking.userId === user.id);
+    const currentDate = now();
+    const bookings = store.bookings
+      .filter((booking) => booking.userId === user.id)
+      .map((booking) => (isExpired(booking, currentDate) ? { ...booking, status: 'expired' } : booking));
+
     return res.status(200).json({ ...user, bookings });
   });
 
