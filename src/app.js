@@ -20,6 +20,10 @@ function isExpired(booking, currentDate) {
   return booking.status !== 'redeemed' && currentDate.getTime() > Date.parse(booking.expiresAt);
 }
 
+function getOwnRecord(collection, key) {
+  return Object.hasOwn(collection, key) ? collection[key] : undefined;
+}
+
 /**
  * Creates and configures the Express application.
  *
@@ -40,12 +44,12 @@ export function createApp({ store = createStore(), now = () => new Date() } = {}
       return res.status(400).json({ error: 'userId and venueId must be non-empty strings' });
     }
 
-    const user = store.users[userId];
+    const user = getOwnRecord(store.users, userId);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const venue = store.venues[venueId];
+    const venue = getOwnRecord(store.venues, venueId);
     if (!venue) {
       return res.status(404).json({ error: 'Venue not found' });
     }
@@ -116,7 +120,7 @@ export function createApp({ store = createStore(), now = () => new Date() } = {}
   });
 
   app.get('/users/:id', (req, res) => {
-    const user = store.users[req.params.id];
+    const user = getOwnRecord(store.users, req.params.id);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
