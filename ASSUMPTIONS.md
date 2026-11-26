@@ -3,3 +3,4 @@
 3. No authentication for the endpoints. I assume, any caller can pass userId, venueId or redemption code for this prototype.
 4. In memory store. Resets data on server restart. Because nodejs is single threaded, synchronus capacity and redeem checks run without race conditions.
 5. No cancellations or refund is possible in the prototype for now.
+6. Redemption codes expire after 10 mins. No auto refund happens if the code is expired and the user did now show up.
